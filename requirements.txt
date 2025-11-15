@@ -19,7 +19,7 @@ Pillow>=10.0.0
 
 # Option 1: NVIDIA GPU with CUDA 11.8 (RECOMMENDED)
 # pip install -r requirements.txt
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+# pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 
 # Option 2: NVIDIA GPU with CUDA 12.1
 # pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
