@@ -1,0 +1,34 @@
+
+============================================================
+CONCRETE CARBONATION ANALYSIS REPORT
+============================================================
+
+AREA MEASUREMENTS
+------------------------------------------------------------
+Total Concrete Area: 13,470,941 pixels
+Non-Carbonated Area: 112 pixels
+Carbonated Area: 13,470,829 pixels
+
+CARBONATION PERCENTAGES
+------------------------------------------------------------
+Non-Carbonated: 0.00%
+Carbonated: 100.00%
+
+DEPTH ANALYSIS
+------------------------------------------------------------
+Concrete Area: 21532199.52 mm²
+Non-Carbonated Area: 179.02 mm²
+
+METHODOLOGY
+------------------------------------------------------------
+Algorithm: Choi et al. (2017)
+- Stage 1: Green channel extraction
+- Stage 2: Inversion (magenta→bright)
+- Stage 3: Binary threshold (100)
+- Stage 4: Morphological close (7x7, 2x)
+- Stage 5: Morphological open (7x7, 1x)
+- Stage 6: Connected component labeling
+- Stage 7: Convex hull refinement
+- Stage 8: Concrete mask application
+- Color: Magenta (phenolphthalein) = non-carbonated
+- Color: Gray/Colorless = carbonated region
