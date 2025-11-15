@@ -1,12 +1,12 @@
 """
-MAIN PIPELINE v3 DEBUG - WITH STEP-BY-STEP CARBONATION VISUALIZATION
+MAIN PIPELINE v3 DEBUG FIXED - WITH IMPROVED MASK REFINEMENT
 
 Pipeline:
 1. Image Preprocessing
-2. GPU-Accelerated Segmentation (SAM2)
+2. GPU-Accelerated Segmentation (SAM2) with Mask Refinement
 3. Adaptive Calibration
 4. Precision Measurement
-5. CARBONATION ANALYSIS with DEBUG OUTPUTS (NEW!)
+5. Carbonation Analysis with Debug Outputs
 6. Comprehensive Reporting
 """
 
@@ -27,8 +27,8 @@ except ImportError as e:
     print(f"Error importing modules: {e}")
     sys.exit(1)
 
-class ConcreteAnalysisPipelineV3Debug:
-    """Complete analysis pipeline with carbonation detection and debug outputs"""
+class ConcreteAnalysisPipelineV3DebugFixed:
+    """Complete analysis pipeline with improved mask refinement"""
 
     def __init__(self, output_dir: str = "output"):
         self.output_dir = Path(output_dir)
@@ -37,6 +37,10 @@ class ConcreteAnalysisPipelineV3Debug:
         # Create debug subdirectory for carbonation analysis
         self.carbonation_debug_dir = self.output_dir / "carbonation_debug"
         self.carbonation_debug_dir.mkdir(exist_ok=True)
+
+        # Create segmentation debug directory
+        self.segmentation_debug_dir = self.output_dir / "segmentation_debug"
+        self.segmentation_debug_dir.mkdir(exist_ok=True)
 
         self.preprocessor = ImagePreprocessor()
         self.segmenter = SegmentationModule()
@@ -85,9 +89,9 @@ class ConcreteAnalysisPipelineV3Debug:
             self.results['preprocessing'] = {'status': 'failed', 'error': str(e)}
             return None
 
-    def stage_2_segmentation(self, preprocessed_image: np.ndarray) -> Optional[Dict]:
-        """Stage 2: GPU-Accelerated Segmentation"""
-        self._print_header("STAGE 2: GPU-ACCELERATED SEGMENTATION")
+    def stage_2_segmentation_improved(self, preprocessed_image: np.ndarray) -> Optional[Dict]:
+        """Stage 2: GPU-Accelerated Segmentation with Mask Refinement"""
+        self._print_header("STAGE 2: GPU-ACCELERATED SEGMENTATION WITH MASK REFINEMENT")
         print("-" * 70)
 
         device_info = self.segmenter.get_device_info()
@@ -101,24 +105,40 @@ class ConcreteAnalysisPipelineV3Debug:
             segmentation_results = self.segmenter.segment_and_extract(preprocessed_image)
 
             if segmentation_results.get('masks'):
+                # Save before/after masks for comparison
+                masks = segmentation_results['masks']
+
+                # Visualize segmentation
                 self.segmenter.visualize_segmentation(
                     preprocessed_image,
-                    segmentation_results['masks'],
+                    masks,
                     output_path=str(self.output_dir / "02_segmentation.jpg")
                 )
 
-                for name, mask in segmentation_results.get('masks', {}).items():
+                # Save individual masks for debugging
+                for name, mask in masks.items():
                     cv2.imwrite(str(self.output_dir / f"mask_{name}.jpg"), mask)
+                    # Also save to segmentation debug folder
+                    cv2.imwrite(str(self.segmentation_debug_dir / f"mask_{name}.jpg"), mask)
+
+                # Save mask statistics
+                print("\n[Mask Statistics]")
+                for name, mask in masks.items():
+                    area = np.sum(mask > 0)
+                    percentage = (area / (preprocessed_image.shape[0] * preprocessed_image.shape[1])) * 100
+                    print(f"  {name}: {area:,} pixels ({percentage:.2f}% of image)")
 
             self.results['segmentation'] = {
                 'status': 'success',
                 'masks_found': list(segmentation_results.get('masks', {}).keys()),
                 'saved': str(self.output_dir / "02_segmentation.jpg")
             }
-            print("✓ Stage 2 complete")
+            print("\n✓ Stage 2 complete")
             return segmentation_results
         except Exception as e:
             print(f"✗ Stage 2 failed: {e}")
+            import traceback
+            traceback.print_exc()
             self.results['segmentation'] = {'status': 'failed', 'error': str(e)}
             return None
 
@@ -193,11 +213,11 @@ class ConcreteAnalysisPipelineV3Debug:
             self.results['measurements'] = {'status': 'failed', 'error': str(e)}
             return None
 
-    def stage_5_carbonation_analysis_debug(self,
+    def stage_5_carbonation_analysis_fixed(self,
                                           preprocessed_image: np.ndarray,
                                           segmentation_results: Dict) -> Optional[Dict]:
-        """Stage 5: Carbonation Analysis with DEBUG OUTPUTS"""
-        self._print_header("STAGE 5: CARBONATION ANALYSIS WITH DEBUG OUTPUTS")
+        """Stage 5: Carbonation Analysis on Refined Mask"""
+        self._print_header("STAGE 5: CARBONATION ANALYSIS WITH REFINED MASK")
         print("-" * 70)
 
         try:
@@ -207,11 +227,11 @@ class ConcreteAnalysisPipelineV3Debug:
                 return None
 
             print(f"\nDebug output directory: {self.carbonation_debug_dir}")
-            print("Step-by-step images will be saved to: carbonation_debug/")
-            print("\n[Carbonation] Analyzing non-carbonated regions...")
+            print("Step-by-step images will be saved\n")
+            print("[Carbonation] Analyzing non-carbonated regions...")
+            print("  → Using CLEANED concrete block mask (no scale, no shadows)")
             print("  → Method: Phenolphthalein coloration (magenta detection)")
-            print("  → Algorithm: Choi et al. (2017)")
-            print("  → All stages will output debug images\n")
+            print("  → Algorithm: Choi et al. (2017)\n")
 
             carbonation_results = self.carbonation_analyzer.analyze_carbonation(
                 preprocessed_image,
@@ -243,11 +263,6 @@ class ConcreteAnalysisPipelineV3Debug:
             print("\n" + "="*70)
             print("✓ Stage 5 complete")
             print("="*70)
-            print(f"\nDebug images saved in: {self.carbonation_debug_dir}/")
-            print("\nImagefiles generated:")
-            debug_files = sorted(self.carbonation_debug_dir.glob("*.jpg"))
-            for i, f in enumerate(debug_files, 1):
-                print(f"  {i:2d}. {f.name}")
 
             return carbonation_results
         except Exception as e:
@@ -286,14 +301,14 @@ class ConcreteAnalysisPipelineV3Debug:
 
             if self.results.get('measurements', {}).get('status') != 'failed':
                 meas = self.results['measurements']
-                print(f"\nBlock Dimensions:")
+                print(f"\nBlock Dimensions (REFINED):")
                 print(f"  Width: {meas.get('width_mm', 0):.2f} mm")
                 print(f"  Height: {meas.get('height_mm', 0):.2f} mm")
                 print(f"  Area: {meas.get('area_cm2', 0):.2f} cm²")
 
             if self.results.get('carbonation', {}).get('status') != 'failed':
                 carb = self.results['carbonation']
-                print(f"\nCarbonation Analysis:")
+                print(f"\nCarbonation Analysis (CORRECTED):")
                 print(f"  Non-carbonated: {carb.get('non_carbonated_percentage', 0):.2f}%")
                 print(f"  Carbonated: {carb.get('carbonated_percentage', 0):.2f}%")
 
@@ -307,19 +322,18 @@ class ConcreteAnalysisPipelineV3Debug:
 
     def run_pipeline(self, image_path: str) -> bool:
         """Run complete pipeline"""
-        self._print_header("CONCRETE BLOCK ANALYSIS PIPELINE v3 DEBUG")
-        print("Complete analysis with STEP-BY-STEP CARBONATION DEBUG OUTPUTS")
+        self._print_header("CONCRETE BLOCK ANALYSIS PIPELINE v3 FIXED")
+        print("Complete analysis with IMPROVED MASK REFINEMENT")
         print(f"\nInput image: {image_path}")
         print(f"Output directory: {self.output_dir.absolute()}")
-        print(f"Debug directory: {self.carbonation_debug_dir.absolute()}")
 
         # Stage 1
         preprocessed_image = self.stage_1_preprocessing(image_path)
         if preprocessed_image is None:
             return False
 
-        # Stage 2
-        segmentation_results = self.stage_2_segmentation(preprocessed_image)
+        # Stage 2 - Improved with mask refinement
+        segmentation_results = self.stage_2_segmentation_improved(preprocessed_image)
         if segmentation_results is None:
             return False
 
@@ -338,24 +352,26 @@ class ConcreteAnalysisPipelineV3Debug:
         if measurements is None:
             return False
 
-        # Stage 5 - NEW CARBONATION ANALYSIS WITH DEBUG
-        carbonation = self.stage_5_carbonation_analysis_debug(preprocessed_image, segmentation_results)
+        # Stage 5 - Fixed with refined mask
+        carbonation = self.stage_5_carbonation_analysis_fixed(preprocessed_image, segmentation_results)
 
         # Stage 6
         report = self.stage_6_reporting()
 
-        self._print_header("PIPELINE COMPLETE ✓")
+        self._print_header("PIPELINE COMPLETE ✓ (WITH MASK REFINEMENT)")
         print("All outputs saved to:", self.output_dir.absolute())
-        print("\nDebug images for carbonation analysis saved to:")
-        print(f"  {self.carbonation_debug_dir.absolute()}")
-        print("\nYou can now examine each stage to find where the bug is!")
+        print("\nKey Improvements:")
+        print("  ✓ Scale removed from concrete mask")
+        print("  ✓ Shadows removed with morphological opening")
+        print("  ✓ Only main concrete block kept")
+        print("  ✓ Carbonation analysis on correct mask")
 
         return True
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python main_v3_debug.py <image_path> [output_dir]")
+        print("Usage: python main_v3_debug_fixed.py <image_path> [output_dir]")
         sys.exit(1)
 
     image_path = sys.argv[1]
@@ -365,7 +381,7 @@ if __name__ == "__main__":
         print(f"Error: Image not found: {image_path}")
         sys.exit(1)
 
-    pipeline = ConcreteAnalysisPipelineV3Debug(output_dir=output_dir)
+    pipeline = ConcreteAnalysisPipelineV3DebugFixed(output_dir=output_dir)
     success = pipeline.run_pipeline(image_path)
 
     sys.exit(0 if success else 1)

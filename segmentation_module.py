@@ -1,7 +1,8 @@
-"""Segmentation Module using Ultralytics - WITH GPU ACCELERATION
+"""Segmentation Module using Ultralytics - WITH GPU ACCELERATION & MASK REFINEMENT
 
 Performs precise object segmentation with automatic GPU detection and acceleration.
 Uses Ultralytics SAM2 model for state-of-the-art segmentation.
+Includes advanced mask cleaning to remove scale and shadows from concrete mask.
 """
 
 import cv2
@@ -16,7 +17,7 @@ except ImportError:
     SAM = None
 
 class SegmentationModule:
-    """Performs segmentation using Ultralytics SAM2"""
+    """Performs segmentation using Ultralytics SAM2 with advanced mask refinement"""
 
     def __init__(self, model_path: str = "sam2_b.pt"):
         """Initialize SAM 2 with automatic GPU detection
@@ -164,6 +165,65 @@ class SegmentationModule:
 
         return masks
 
+    def _clean_concrete_mask(self, concrete_mask: np.ndarray, 
+                            scale_mask: np.ndarray) -> np.ndarray:
+        """Clean concrete mask by removing scale and shadows
+
+        Args:
+            concrete_mask: Original concrete block mask
+            scale_mask: Scale/ruler mask to remove
+
+        Returns:
+            Cleaned concrete mask (only concrete block)
+        """
+        print("\n[Mask Refinement] Cleaning concrete block mask...")
+
+        # Step 1: Remove scale from concrete mask
+        print("  Step 1: Removing scale from concrete mask...")
+        # Dilate scale mask slightly to ensure complete removal
+        scale_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))
+        scale_dilated = cv2.dilate(scale_mask, scale_kernel, iterations=2)
+
+        # Subtract scale from concrete mask
+        cleaned_mask = cv2.bitwise_and(concrete_mask, cv2.bitwise_not(scale_dilated))
+
+        print(f"    Original concrete area: {np.sum(concrete_mask > 0):,} pixels")
+        print(f"    After removing scale: {np.sum(cleaned_mask > 0):,} pixels")
+
+        # Step 2: Morphological opening to remove small shadows
+        print("  Step 2: Removing small shadows with morphological opening...")
+        kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
+        opened = cv2.morphologyEx(cleaned_mask, cv2.MORPH_OPEN, kernel_open, iterations=2)
+
+        print(f"    After removing shadows: {np.sum(opened > 0):,} pixels")
+
+        # Step 3: Morphological closing to fill small holes in concrete
+        print("  Step 3: Filling small holes with morphological closing...")
+        kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
+        closed = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, kernel_close, iterations=2)
+
+        print(f"    After filling holes: {np.sum(closed > 0):,} pixels")
+
+        # Step 4: Keep only the largest connected component (main concrete block)
+        print("  Step 4: Keeping only main concrete block...")
+        num_labels, labels_im = cv2.connectedComponents(closed)
+
+        if num_labels > 1:
+            # Find the largest component (excluding background which is 0)
+            component_areas = [(labels_im == i).sum() for i in range(1, num_labels)]
+            largest_label = np.argmax(component_areas) + 1
+
+            final_mask = np.zeros_like(closed)
+            final_mask[labels_im == largest_label] = 255
+
+            print(f"    Found {num_labels} components, keeping largest")
+            print(f"    Final concrete area: {np.sum(final_mask > 0):,} pixels")
+
+            return final_mask
+        else:
+            print(f"    No components found after cleaning")
+            return closed
+
     def detect_scale_boundaries(self, scale_mask: np.ndarray) -> Tuple[np.ndarray, Dict]:
         """Detect precise boundaries of the scale/ruler
 
@@ -194,7 +254,7 @@ class SegmentationModule:
         """Detect precise boundaries of concrete block
 
         Args:
-            concrete_mask: Binary mask of concrete block
+            concrete_mask: Binary mask of concrete block (cleaned)
 
         Returns:
             Tuple of (edge image, boundary info dict)
@@ -247,7 +307,7 @@ class SegmentationModule:
         return vis_image
 
     def segment_and_extract(self, image: np.ndarray) -> Dict:
-        """Complete segmentation pipeline with GPU acceleration
+        """Complete segmentation pipeline with GPU acceleration and mask refinement
 
         Args:
             image: Preprocessed input image
@@ -262,6 +322,14 @@ class SegmentationModule:
         masks = self.extract_masks(results[0] if isinstance(results, list) else results)
 
         segmentation_data = {'masks': masks}
+
+        # Refine concrete mask by removing scale
+        if 'concrete_block' in masks and 'scale' in masks:
+            print("\n[Quality Control] Refining concrete block mask...")
+            masks['concrete_block'] = self._clean_concrete_mask(
+                masks['concrete_block'],
+                masks['scale']
+            )
 
         if 'concrete_block' in masks:
             edges, boundary_info = self.detect_concrete_boundaries(masks['concrete_block'])
